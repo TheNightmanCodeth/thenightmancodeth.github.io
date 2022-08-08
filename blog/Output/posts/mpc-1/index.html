@@ -1,70 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Joe's Blog</title><description>A cautionary tale on the horrors of programming ❤️</description><link>https://www.jdiggity.me</link><language>en</language><lastBuildDate>Mon, 8 Aug 2022 17:06:26 -0400</lastBuildDate><pubDate>Mon, 8 Aug 2022 17:06:26 -0400</pubDate><ttl>250</ttl><atom:link href="https://www.jdiggity.me/feed.rss" rel="self" type="application/rss+xml"/><item><guid isPermaLink="true">https://www.jdiggity.me/posts/publish-ghactions</guid><title>Using GitHub actions to deploy Publish sites to GitHub Pages</title><description></description><link>https://www.jdiggity.me/posts/publish-ghactions</link><pubDate>Mon, 8 Aug 2022 17:06:21 -0400</pubDate><content:encoded><![CDATA[<h1>Using GitHub actions to deploy Publish sites to GitHub Pages</h1><p>I just spent a good few weeks looking for a good static site generator and in my journey found <a href="https://github.com/JohnSundell/Publish">Publish</a>. While this article isn’t about that, I highly recommend using Publish if you’re a Swift developer looking for a good static site generator!</p><p>While <code>Publish</code> comes with a built-in deployment function that works with GH Pages, <em>I</em> couldn't get it to work. It looks like it really only works if you’re deploying to a separate repository. Even then, a lot of us wish to automatically trigger a publish on each new blog post or git commit. I spent some time yesterday messing with GitHub Actions and put together a build script that can do just that.</p><h2>The Process</h2><p>I started off trying to simply spin up a macOS machine, cloning my repo, installing the <code>publish</code> command line tool from <code>homebrew</code>, generating the <code>HTML</code> and pushing that to my GitHub Pages branch.</p><p>This proved to be a bit of a hassle. GitHub actions uses a version of macOS that is too old to work with the <code>publish</code> command line tool that is available through <code>homebrew</code>.</p><p>“Okay,” I thought. “I’ll just build the command line tool from the source code.” Well, that didn’t work either. I was missing some swift concurrency libraries on the worker machine. That meant, I assume, the version of <code>Swift</code> on the GH Actions build machine was too old ☹️.</p><p>At this point I considered giving up, until I remembered <code>Swift</code> is cross platform! 🎉🎉</p><p>I set the runner to use <code>ubuntu-latest</code> instead of <code>macOS-latest</code> and got to thinking.</p><p>On <code>Ubuntu</code> the steps would be a bit different. First and foremost I’d need to install <code>Swift</code>. Luckily there exists an action on the GitHub Actions Marketplace called <code>[Install Swift on Linux](https://github.com/marketplace/actions/install-swift-on-linux)</code> which does just that: installs Swift on a Linux worker on Github Actions! Lucky day!</p><p>After Swift was installed I’d need to either get the <code>publish</code> command line tool building on Linux or figure out a way to build the project some other way. 🤞</p><p>Luckily (spoiler alert) the <code>publish</code> tool compiled and installed just fine on Ubuntu.</p><p>The last step was to push the resulting <code>Output</code> directory to my GitHub pages branch on my repo. Luckily there exists an awesome action on the GitHub Marketplace that makes doing that extremely easy. It’s called <a href="https://github.com/marketplace/actions/deploy-to-github-pages">Deploy to GitHub Pages</a> and it works like a charm!</p><p>Now that we’ve outlined the approach let’s get to making the workflow!</p><h2>Before we start...</h2><p>This will <em>not</em> be a GitHub Pages tutorial. In order to follow along here, you should already have GitHub Pages setup using one of your repos. You can check out the <a href="https://docs.github.com/en/pages/getting-started-with-github-pages/creating-a-github-pages-site">Creating a GitHub Pages Site</a> article for more info. Basically you'll create a new repository, name it <code>&lt;yourgithubusername&gt;.github.io</code> and configure the settings there.</p><h2>Creating the Workflow</h2><p>To get started creating the workflow we’ll open up a terminal and <code>cd</code> into our project’s root directory.</p><p>Once there, we create the directory <code>.github/workflows</code> and create a new file inside there called <code>main.yml</code>.</p><pre><code>mkdir -p .<span class="dotAccess">github</span>/workflows
-touch .<span class="dotAccess">github</span>/workflows/main.<span class="property">yml</span>
-</code></pre><p>Now we open up our favorite text editor and start configuring our workflow!</p><pre><code>nvim .<span class="dotAccess">github</span>/workflows/main.<span class="property">yml</span>
-</code></pre><p>First, we name our workflow:</p><pre><code>name: <span class="type">Deploy</span> to <span class="type">GitHub Pages</span>
-</code></pre><p>Next, we trigger the workflow when the branch with our source code receives a push. In my case, the source code for my blog is located on the <code>Publish</code> branch.</p><pre><code>on:
-  push:
-    branches: [ “<span class="type">Publish</span>” ]
-</code></pre><p>Finally we begin the actual workflow. First we tell the worker to use <code>ubuntu-latest</code> and use the marketplace action mentioned above to install the latest version of <code>Swift</code>.</p><pre><code>jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: <span class="type">Install Swift</span>
-        uses: sersoft-gmbh/swifty-linux-action@v1
-        with:
-          release-version: <span class="number">5.6.2</span>
-</code></pre><p>With our worker configured and swift installed we can move on to the next step: installing the <code>publish</code> command line tool.</p><p>Inside of the <code>steps</code> section we add the following:</p><pre><code>- name: <span class="type">Install Publish</span>
-  run: |
-    git clone https://github.<span class="property">com</span>/<span class="type">JohnSundell</span>/<span class="type">Publish</span>.<span class="property">git</span>
-    cd <span class="type">Publish</span>
-    make
-</code></pre><p>Now we can pull our repo to the worker and generate our static website!</p><pre><code>       - uses: actions/checkout@v3
-      
-      - name: <span class="type">Generate</span> site
-        run: |
-          cd <span class="property">$GITHUB_WORKSPACE</span>/blog/
-          publish generate
-</code></pre><p>A few things are going on here. First we use the <code>checkout</code> action from GitHub that pulls our repo from the branch that this <code>main.yml</code> is located on. The <code>checkout</code> action pulls the source code to <code>$GITHUB_WORKSPACE</code>, so we <code>cd</code> to that path. In my case, the source code is located inside of a subdirectory called <code>blog</code>, so I change directories to <code>$GITHUB_WORKSPACE/blog</code>. Once inside that directory we call <code>publish generate</code> to generate our static website.</p><p>Lastly we’ll use the <code>github-pages-deploy-action</code> to deploy our static site to our GitHub Pages branch!</p><pre><code>         - name: <span class="type">Deploy</span> site
-          uses: <span class="type">JamesIves</span>/github-pages-deploy-action@v4
-            with:
-              branch: master
-              folder: blog/<span class="type">Output</span>
-</code></pre><p>And just like that, our workflow is complete! In the last step we tell the <code>github-pages-deploy-action</code> which branch to deploy to, you might set this to <code>gh-pages</code> depending on your configuration. Then we tell it where our static site is located. In my case it’s located in the <code>Output</code> folder inside of the <code>blog</code> folder inside of the root of my repo. Yours might just be <code>folder: Output</code>.</p><p>After all of that, your <code>.github/workflows/main.yml</code> file should look something like this:</p><pre><code>
-
-name: <span class="type">Deploy</span> to <span class="type">GHPages</span>
-
-on:
-  push:
-    branches: [ <span class="string">"Publish"</span> ]
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: <span class="type">Install Swift</span>
-        uses: sersoft-gmbh/swifty-linux-action@v1
-        with:
-          release-version: <span class="number">5.6.2</span>
-
-      - name: <span class="type">Install Publish</span>
-        run: |
-          git clone https://github.<span class="property">com</span>/<span class="type">JohnSundell</span>/<span class="type">Publish</span>.<span class="property">git</span>
-          cd <span class="type">Publish</span>
-          make
-
-      - uses: actions/checkout@v3
-
-      - name: <span class="type">Generate</span> site
-        run: |
-          cd <span class="property">$GITHUB_WORKSPACE</span>/blog/
-          publish generate
-
-      - name: <span class="type">Publish</span> site
-        uses: <span class="type">JamesIves</span>/github-pages-deploy-action@v4
-        with:
-          branch: master
-          folder: blog/<span class="type">Output</span>
-</code></pre><p>Now commit and push that file to your repo and go to the <code>actions</code> tab.</p><img src="https://www.jdiggity.me/img/ghactions.png" alt="GitHub Actions"/>]]></content:encoded></item><item><guid isPermaLink="true">https://www.jdiggity.me/posts/mpc-2</guid><title>mpc-2</title><description></description><link>https://www.jdiggity.me/posts/mpc-2</link><pubDate>Mon, 8 Aug 2022 16:46:39 -0400</pubDate><content:encoded><![CDATA[]]></content:encoded></item><item><guid isPermaLink="true">https://www.jdiggity.me/posts/mpc-1</guid><title>Using the Multipeer Connectivity Framework with SwiftUI 4</title><description>How I got the multipeer connectivity framework working with SwiftUI 4</description><link>https://www.jdiggity.me/posts/mpc-1</link><pubDate>Sun, 7 Aug 2022 18:32:00 -0400</pubDate><content:encoded><![CDATA[<h1>Using the Multipeer Connectivity Framework with SwiftUI 4</h1><p>Welcome to my first SwiftUI tutorial! In this one, I’m going to be demonstrating how to implement a basic Multipeer connectivity app that uses SwiftUI 4, no UIKit needed!</p><p>Without further ado, let’s begin!</p><p>The basic structure of our app will be as follows:</p><ul><li>A MultipeerSession object to handle pairing and communication with our paired peer</li><li>PairView will show the user a list of available peers and allow them to invite them to a game</li><li>GameView will display the game controls and show the user if they’ve won or lost</li></ul><p>The game will be a basic “Rock, Paper, Scissors” game. The users will pair up with each other, then they will be shown three options, rock, paper or scissors. When the user selects a move it will be sent to the opponent’s device, and once the timer is up the result will be shown.</p><p>With that basic overview out of the way, let’s dive into some code.</p><p>We’ll start by creating the MultipeerSession object. First, we need to import MultipeerConnectivity into our class and inherit NSObject and ObrvableObject.</p><pre><code><span class="keyword">class</span> RPSMultipeerSession: <span class="type">NSObject</span>, <span class="type">ObservableObject</span> {
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><meta name="og:site_name" content="Joe's Blog"/><link rel="canonical" href="https://www.jdiggity.me/posts/mpc-1"/><meta name="twitter:url" content="https://www.jdiggity.me/posts/mpc-1"/><meta name="og:url" content="https://www.jdiggity.me/posts/mpc-1"/><title>Using the Multipeer Connectivity Framework with SwiftUI 4 | Joe's Blog</title><meta name="twitter:title" content="Using the Multipeer Connectivity Framework with SwiftUI 4 | Joe's Blog"/><meta name="og:title" content="Using the Multipeer Connectivity Framework with SwiftUI 4 | Joe's Blog"/><meta name="description" content="How I got the multipeer connectivity framework working with SwiftUI 4"/><meta name="twitter:description" content="How I got the multipeer connectivity framework working with SwiftUI 4"/><meta name="og:description" content="How I got the multipeer connectivity framework working with SwiftUI 4"/><meta name="twitter:card" content="summary"/><link rel="stylesheet" href="/styles.css" type="text/css"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><link rel="shortcut icon" href="/images/favicon.png" type="image/png"/><link rel="alternate" href="/feed.rss" type="application/rss+xml" title="Subscribe to Joe's Blog"/></head><body class="item-page"><header><div class="wrapper"><a href="/" class="site-name">Joe's Blog</a><nav><ul><li><a href="/home">Home</a></li><li><a href="/posts" class="selected">My posts</a></li><li><a href="/about">About</a></li></ul></nav></div></header><div class="wrapper"><article><div class="content"><h1>Using the Multipeer Connectivity Framework with SwiftUI 4</h1><p>Welcome to my first SwiftUI tutorial! In this one, I’m going to be demonstrating how to implement a basic Multipeer connectivity app that uses SwiftUI 4, no UIKit needed!</p><p>Without further ado, let’s begin!</p><p>The basic structure of our app will be as follows:</p><ul><li>A MultipeerSession object to handle pairing and communication with our paired peer</li><li>PairView will show the user a list of available peers and allow them to invite them to a game</li><li>GameView will display the game controls and show the user if they’ve won or lost</li></ul><p>The game will be a basic “Rock, Paper, Scissors” game. The users will pair up with each other, then they will be shown three options, rock, paper or scissors. When the user selects a move it will be sent to the opponent’s device, and once the timer is up the result will be shown.</p><p>With that basic overview out of the way, let’s dive into some code.</p><p>We’ll start by creating the MultipeerSession object. First, we need to import MultipeerConnectivity into our class and inherit NSObject and ObrvableObject.</p><pre><code><span class="keyword">class</span> RPSMultipeerSession: <span class="type">NSObject</span>, <span class="type">ObservableObject</span> {
     <span class="keyword">private let</span> serviceType = <span class="string">"rps-service"</span>
     <span class="keyword">private var</span> myPeerID: <span class="type">MCPeerID</span>
     
@@ -303,4 +237,4 @@ serviceBrowser.<span class="call">startBrowsingForPeers</span>()
         <span class="comment">// Remove lost peer from list of available peers</span>
     }
 }
-</code></pre><p><a href="https://github.com/TheNightmanCodeth/RPS">Don't forget to check out the GitHub repo!</a></p><p><a href="https://www.jdiggity.me/mpc-2">Continue to part 2</a></p>]]></content:encoded></item></channel></rss>
+</code></pre><p><a href="https://github.com/TheNightmanCodeth/RPS">Don't forget to check out the GitHub repo!</a></p><p><a href="/mpc-2">Continue to part 2</a></p></div><ul class="tag-list"><li><a href="/tags/swift">swift</a></li><li><a href="/tags/swiftui">swiftUI</a></li></ul></article></div><footer><p>Generated using <a href="https://github.com/johnsundell/publish">Publish</a></p><p><a href="/feed.rss">RSS feed</a></p></footer></body></html>
