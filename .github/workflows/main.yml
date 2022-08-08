@@ -1,0 +1,26 @@
+name: Deploy to GHPages
+
+on:
+  push:
+    branches: [ "master" ]
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Install Publish
+        run: brew install publish
+
+      - uses: actions/checkout@v3
+
+      - name: Generate site
+        run: |
+          cd $GITHUB_WORKSPACE/blog/
+          publish generate
+
+      - name: Publish site
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: blog/Output
+
+      - name: Done!
