@@ -29,4 +29,5 @@ jobs:
       - name: Publish site
         uses: JamesIves/github-pages-deploy-action@v4
         with:
+          branch: master
           folder: blog/Output
