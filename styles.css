@@ -116,10 +116,6 @@ a {
     color: inherit;
 }
 
-article {
-    
-}
-
 article blockquote {
     position: relative;
     background-color: var(--code-bg-color);
@@ -142,6 +138,14 @@ article ul {
 
 article ul.li {
     display: inline;
+}
+
+article img {
+    width: 100%;
+    max-width: 800px;
+    margin-left: auto;
+    margin-right: auto;
+    padding: 20px;
 }
 
 .description {
@@ -256,7 +260,7 @@ pre code .type {
 }
 
 pre code .call {
-    color var(--code-call);
+    color: var(--code-call);
 }
 
 pre code .property {
