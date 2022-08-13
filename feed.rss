@@ -1,4 +1,226 @@
-<?xml version="1.0" encoding="UTF-8"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Joe's Blog</title><description>A cautionary tale on the horrors of programming ❤️</description><link>https://www.jdiggity.me</link><language>en</language><lastBuildDate>Sat, 13 Aug 2022 03:51:30 +0000</lastBuildDate><pubDate>Sat, 13 Aug 2022 03:51:30 +0000</pubDate><ttl>250</ttl><atom:link href="https://www.jdiggity.me/feed.rss" rel="self" type="application/rss+xml"/><item><guid isPermaLink="true">https://www.jdiggity.me/posts/mpc-2</guid><title>mpc-2</title><description></description><link>https://www.jdiggity.me/posts/mpc-2</link><pubDate>Sat, 13 Aug 2022 03:51:14 +0000</pubDate><content:encoded><![CDATA[]]></content:encoded></item><item><guid isPermaLink="true">https://www.jdiggity.me/posts/publish-ghactions</guid><title>Using GitHub actions to deploy Publish sites to GitHub Pages</title><description>How to use GitHub Actions to deploy a static site built with Publish to GitHub Pages</description><link>https://www.jdiggity.me/posts/publish-ghactions</link><pubDate>Tue, 9 Aug 2022 18:32:00 +0000</pubDate><content:encoded><![CDATA[<h1>Using GitHub actions to deploy Publish sites to GitHub Pages</h1><p>I just spent a good few weeks looking for a good static site generator and in my journey found <a href="https://github.com/JohnSundell/Publish">Publish</a>. While this article isn’t about that, I highly recommend using Publish if you’re a Swift developer looking for a good static site generator!</p><p>While <code>Publish</code> comes with a built-in deployment function that works with GH Pages, <em>I</em> couldn't get it to work. It looks like it really only works if you’re deploying to a separate repository. Even then, a lot of us wish to automatically trigger a publish on each new blog post or git commit. I spent some time yesterday messing with GitHub Actions and put together a build script that can do just that.</p><h2>The Process</h2><p>I started off trying to simply spin up a macOS machine, cloning my repo, installing the <code>publish</code> command line tool from homebrew, generating the HTML and pushing that to my GitHub Pages branch.</p><p>This proved to be a bit of a hassle. GitHub actions uses a version of macOS that is too old to work with the publish command line tool that is available through homebrew.</p><p>“Okay,” I thought. “I’ll just build the command line tool from the source code.” Well, that didn’t work either. I was missing some swift concurrency libraries on the worker machine. That meant, I assume, the version of Swift on the GH Actions build machine was too old ☹️.</p><p>At this point I considered giving up, until I remembered Swift is cross platform! 🎉🎉</p><p>I set the runner to use <code>ubuntu-latest</code> instead of <code>macOS-latest</code> and got to thinking.</p><p>On Ubuntu the steps would be a bit different. First and foremost I’d need to install Swift. Luckily there exists an action on the GitHub Actions Marketplace called <a href="https://github.com/marketplace/actions/install-swift-on-linux"><code>Install Swift on Linux</code></a> which does just that: installs Swift on a Linux worker on Github Actions! Lucky day!</p><p>After Swift was installed I’d need to either get the <code>publish</code> command line tool building on Linux or figure out a way to build the project some other way. 🤞</p><p>Luckily (spoiler alert) the <code>publish</code> tool compiled and installed just fine on Ubuntu.</p><p>The last step was to push the resulting <code>Output</code> directory to my GitHub pages branch on my repo. Luckily there exists an awesome action on the GitHub Marketplace that makes doing that extremely easy. It’s called <a href="https://github.com/marketplace/actions/deploy-to-github-pages">Deploy to GitHub Pages</a> and it works like a charm!</p><p>Now that we’ve outlined the approach let’s get to making the workflow!</p><h2>Before we start...</h2><p>This will <em>not</em> be a GitHub Pages tutorial. In order to follow along here, you should already have GitHub Pages setup using one of your repos. You can check out the <a href="https://docs.github.com/en/pages/getting-started-with-github-pages/creating-a-github-pages-site">Creating a GitHub Pages Site</a> article for more info. Basically you'll create a new repository, name it <code>&lt;yourgithubusername&gt;.github.io</code> and configure the settings there.</p><h2>Creating the Workflow</h2><p>To get started creating the workflow we’ll open up a terminal and <code>cd</code> into our project’s root directory.</p><p>Once there, we create the directory <code>.github/workflows</code> and create a new file inside there called <code>main.yml</code>.</p><pre><code><span class="keyword">mkdir</span> <span class="type">-p</span> <span class="string">.github/workflows</span><br /><span class="keyword">touch</span> <span class="string">.github/workflows/main.yml</span></code></pre><p>Now we open up our favorite text editor and start configuring our workflow!</p><pre><code><span class="keyword">nvim</span> <span class="string">.github/workflows/main.yml</span></code></pre><p>First, we name our workflow:</p><pre><code><span class="type">name</span>: <span class="string">Deploy to GitHub Pages</span></code></pre><p>Next, we trigger the workflow when the branch with our source code receives a push. In my case, the source code for my blog is located on the <code>Publish</code> branch.</p><pre><code><span class="type">on</span>:<br />  <span class="type">push</span>:<br />    <span class="type">branches</span>: [ <span class="string">“Publish”</span> ]</code></pre><p>Finally we begin the actual workflow. First we tell the worker to use <code>ubuntu-latest</code> and use the marketplace action mentioned above to install the latest version of <code>Swift</code>.</p><pre><code><span class="type">jobs</span>:<br />  <span class="type">build</span>:<br />    <span class="type">runs-on</span>: <span class="string">ubuntu-latest</span><br />    <span class="type">steps</span>:<br />      - <span class="type">name</span>: <span class="string">Install Swift</span><br />        <span class="type">uses</span>: <span class="string">sersoft-gmbh/swifty-linux-action@v1</span><br />        <span class="type">with</span>:<br />          <span class="type">release-version</span>: <span class="string">5.6.2</span></code></pre><p>With our worker configured and swift installed we can move on to the next step: installing the <code>publish</code> command line tool.</p><p>Inside of the <code>steps</code> section we add the following:</p><pre><code>- <span class="type">name</span>: <span class="string">Install Publish</span><br />  <span class="type">run</span>: <span class="keyword">|</span><br /><span class="string">    git clone https://github.com/JohnSundell/Publish.git<br />    cd Publish<br />    make</span></code></pre><p>Now we can pull our repo to the worker and generate our static website!</p><pre><code>- <span class="type">uses</span>: <span class="string">actions/checkout@v3</span><br /><br />- <span class="type">name</span>: <span class="string">Generate site</span>
+<?xml version="1.0" encoding="UTF-8"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Joe's Blog</title><description>A cautionary tale on the horrors of programming ❤️</description><link>https://www.jdiggity.me</link><language>en</language><lastBuildDate>Sat, 13 Aug 2022 17:50:57 +0000</lastBuildDate><pubDate>Sat, 13 Aug 2022 17:50:57 +0000</pubDate><ttl>250</ttl><atom:link href="https://www.jdiggity.me/feed.rss" rel="self" type="application/rss+xml"/><item><guid isPermaLink="true">https://www.jdiggity.me/posts/mpc-2</guid><title>mpc-2</title><description></description><link>https://www.jdiggity.me/posts/mpc-2</link><pubDate>Sat, 13 Aug 2022 17:50:42 +0000</pubDate><content:encoded><![CDATA[]]></content:encoded></item><item><guid isPermaLink="true">https://www.jdiggity.me/posts/ssg-comparison</guid><title>The Grimm Adventures of Choosing a Static Site Generator</title><description>How I struggled to find a static site generator with proper syntax highlighting and friendly templating</description><link>https://www.jdiggity.me/posts/ssg-comparison</link><pubDate>Sat, 13 Aug 2022 13:32:00 +0000</pubDate><content:encoded><![CDATA[<h1>The Grimm Adventures of Choosing a Static Site Generator</h1><p>I'm still new to this whole <em>technical blogging</em> thing. I've spent the majority of my time so far jumping between different static site generators when I should've been using that time to go back to 8th grade spelling and grammar.</p><p>I just wanted to find a generator that made me feel cool. <a href="">Publish</a>, for instance, made me feel super bleeding edge. It's a relatively young SSG; it's first commit was pushed in 2019! <a href="">Hugo</a> was another contender, since it's written in <code>go</code> and has a large and, most importantly, active userbase. I also tried out <a href="">VuePress</a>, which had me excited to use <code>vue.js</code> in my layouts.</p><p>Immediately, though, <code>publish</code> stood out to me. The other frameworks had me building page templates in raw HTML using different templating engines, but, <code>publish</code> let me create my layouts using <code>swift</code> in a very similar fashion to <code>swiftUI</code>. Just look at how cool <code>publish</code> is:</p><pre><code><span class="keyword">func</span> makeIndexHTML(for index: <span class="type">Index</span>, context: <span class="type">PublishingContext</span>&lt;<span class="type">Blog</span>&gt;) <span class="keyword">throws</span> -&gt; <span class="type">HTML</span> {
+    <span class="type">HTML</span> (
+        .<span class="call">lang</span>(context.<span class="property">site</span>.<span class="property">language</span>),
+        .<span class="call">head</span>(for: index, on: context.<span class="property">site</span>),
+        .<span class="call">body</span> {
+            <span class="type">SiteHeader</span>(context: context, selectedSelectionID: <span class="keyword">nil</span>)
+            <span class="type">Wrapper</span> {
+                <span class="type">H1</span>(index.<span class="property">title</span>)
+                    .<span class="call">style</span>(<span class="string">"text-align: center;"</span>)
+                <span class="type">Paragraph</span>(context.<span class="property">site</span>.<span class="property">description</span>)
+                    .<span class="call">class</span>(<span class="string">"description"</span>)
+                <span class="type">H2</span>(<span class="string">"Latest content"</span>)
+                <span class="type">ItemList</span>(
+                    items: context.<span class="call">allItems</span>(
+                        sortedBy: \.<span class="property">date</span>,
+                        order: .<span class="dotAccess">descending</span>
+                    ),
+                    site: context.<span class="property">site</span>
+                )
+            }
+            <span class="type">SiteFooter</span>()
+        }
+    )
+}
+</code></pre><p>It's <em>extremely</em> approachable for someone who hasn't had the (great dis)pleasure of dealing with raw HTML/CSS in a long time. Of course, I still needed to make stylesheets with css, but it wasn't so bad!</p><h2>Publish</h2><p>As I stated earler, I <em>love</em> using <code>publish</code> for static site generation. I even posted a guide on using GitHub Actions to generate and deploy <code>publish</code> sites to GitHub Pages. You can check that out <a href="https://www.jdiggity.me/publish-ghactions">here</a> if you want.</p><p>But after fully committing and getting deep into the project I started to hit some roadblocks. The first of which I went over in my other post (linked above), but to recap I had no luck getting the built-in deploy functionality to work with GitHub Pages. Every time I tried publishing using the command line tool my terminal froze up while it was trying to push to the repo. I think the publish utility was meant to work only for people who have their codebase untracked on a local machine, or in a seperate repo. I took a look at the code and the publish function is basically just <code>cd</code>ing to the <code>Output</code> directory, initializing a git repo and trying to push. That didn't seem to work inside of an existing git repo.</p><p>The second (worst and final as well) issue I hit was a devastating lack of syntax highlighting. Programming is my entire blog. Every single post I make will include code snippets and sometimes those code snippets <em>aren't</em> swift. Publish comes with a pretty impressive syntax highlighting utility called <a href="https://github.com/johnsundell/splash">Splash</a>. It's really cool and works really well but, unfortunately, only for swift. Splash definitely has the potential to work with other languages. In fact, someone has added <a href="https://github.com/JZDesign/Splash/blob/kotlinGrammar2/Sources/Splash/Grammar/KoltinGrammar.swift">support for Kotlin</a>. The only problem is it takes a <strong>lot</strong> of work to add support for another language. You may call me lazy. You may say, "If you want support for other languages so bad why don't you add it yourself?" And to that I say:</p><h2>Creating a custom syntax highlighter for YAML using Splash</h2><p>I went ahead and gave it my all. I dug deep into the <a href="https://github.com/JohnSundell/Splash/blob/master/Sources/Splash/Grammar/SwiftGrammar.swift">swift grammar</a> and worked out how the original author implemented the Swift syntax highlighter. I won't bore you with the details, but it wasn't too bad. Too sum up, I created a new struct that implements <code>Grammar</code>. I defined a list of delimiters that basically tell the parser where each part of the code starts and stops. We then create several <code>SyntaxRule</code>s that are called when the parser reaches a new token.</p><p>Since <code>yaml</code> isn't exactly a programming language, it wasn't too difficult to create a highlighter for it. I simply created rules for comments that checks if the current line begins with a <code>#</code>, a string rule that's a little more complex, and rules for types and keywords that simply check if the current token is a part of a predefined list.</p><p>Here's what <code>YamlGrammar</code> wound up looking like:</p><pre><code><span class="keyword">public struct</span> YamlGrammar: <span class="type">Grammar</span> {
+    <span class="keyword">public var</span> delimiters: <span class="type">CharacterSet</span>
+    <span class="keyword">public var</span> syntaxRules: [<span class="type">SyntaxRule</span>]
+    
+    <span class="keyword">public init</span>() {
+        <span class="keyword">var</span> delimiters = <span class="type">CharacterSet</span>.<span class="property">alphanumerics</span>.<span class="property">inverted</span>
+        delimiters.<span class="call">remove</span>(<span class="string">"_"</span>)
+        delimiters.<span class="call">remove</span>(<span class="string">"-"</span>)
+        delimiters.<span class="call">remove</span>(<span class="string">"\"")</span>
+        delimiters.<span class="call">remove</span>(<span class="string">"#"</span>)
+        delimiters.<span class="call">remove</span>(<span class="string">"@"</span>)
+        delimiters.<span class="call">remove</span>(<span class="string">"$"</span>)
+        <span class="keyword">self</span>.<span class="property">delimiters</span> = delimiters
+        
+        syntaxRules = [
+            <span class="type">KeywordRule</span>(),
+            <span class="type">TypeRule</span>(),
+            <span class="type">StringRule</span>(),
+            <span class="type">CommentRule</span>(),
+            <span class="type">NumberRule</span>()
+        ]
+    }
+    
+    <span class="keyword">public func</span> isDelimiter(<span class="keyword">_</span> delimiterA: <span class="type">Character</span>, mergableWith delimiterB: <span class="type">Character</span>) -&gt; <span class="type">Bool</span> {
+        <span class="keyword">switch</span> (delimiterA, delimiterB) {
+        <span class="keyword">case</span> (<span class="keyword">_</span>, <span class="string">":"</span>):
+            <span class="keyword">return false
+        case</span> (<span class="string">":"</span>, <span class="string">"/"</span>):
+            <span class="keyword">return true
+        case</span> (<span class="string">":"</span>, <span class="keyword">_</span>):
+            <span class="keyword">return false
+        case</span> (<span class="string">"-"</span>, <span class="keyword">_</span>):
+            <span class="keyword">return false
+        case</span> (<span class="string">"#"</span>, <span class="keyword">_</span>):
+            <span class="keyword">return false
+        default</span>:
+            <span class="keyword">return true</span>
+        }
+    }
+}
+
+<span class="keyword">private extension</span> <span class="type">YamlGrammar</span> {
+    <span class="keyword">static let</span> keywords = ([
+        <span class="string">"|"</span>, <span class="string">"---"</span>, <span class="string">"..."</span>, <span class="string">"&gt;"</span>, <span class="string">"["</span>, <span class="string">"]"</span>, <span class="string">"-"</span>
+    ] <span class="keyword">as</span> <span class="type">Set</span>&lt;<span class="type">String</span>&gt;)
+    
+    <span class="keyword">struct</span> CommentRule: <span class="type">SyntaxRule</span> {
+        <span class="keyword">var</span> tokenType: <span class="type">TokenType</span> { <span class="keyword">return</span> .<span class="dotAccess">comment</span> }
+        
+        <span class="keyword">func</span> matches(<span class="keyword">_</span> segment: <span class="type">Segment</span>) -&gt; <span class="type">Bool</span> {
+            <span class="keyword">if</span> segment.<span class="property">tokens</span>.<span class="property">onSameLine</span>.<span class="call">contains</span>(<span class="string">"#"</span>) {
+                <span class="keyword">return true</span>
+            }
+            
+            <span class="keyword">return</span> segment.<span class="property">tokens</span>.<span class="property">current</span>.<span class="call">hasPrefix</span>(<span class="string">"#"</span>)
+        }
+    }
+    
+    <span class="keyword">struct</span> StringRule: <span class="type">SyntaxRule</span> {
+        <span class="keyword">var</span> tokenType: <span class="type">TokenType</span> { <span class="keyword">return</span> .<span class="dotAccess">string</span> }
+        
+        <span class="keyword">func</span> matches(<span class="keyword">_</span> segment: <span class="type">Segment</span>) -&gt; <span class="type">Bool</span> {
+            <span class="keyword">if let</span> prev = segment.<span class="property">tokens</span>.<span class="property">previous</span> {
+                <span class="comment">/**
+                 *  In yaml files, quotes around strings are optional
+                 *  Unless it's a number, a value following a colon or lines after a pipe (|) are considered a string
+                 */</span>
+                <span class="keyword">if</span> prev.<span class="call">hasSuffix</span>(<span class="string">":"</span>) {
+                    <span class="keyword">if let</span> next = segment.<span class="property">tokens</span>.<span class="property">next</span> {
+                        <span class="keyword">if</span> segment.<span class="property">tokens</span>.<span class="property">current</span>.<span class="call">hasSuffix</span>(<span class="string">":"</span>) &amp;&amp; next.<span class="call">hasSuffix</span>(<span class="string">":"</span>) {
+                            <span class="comment">/**
+                             * ie.
+                             *  name:
+                             *    name2: &lt;&lt; This is not a string
+                             *      ...
+                             */</span>
+                            <span class="keyword">return false</span>
+                        }
+                        <span class="keyword">return true</span>
+                    }
+                } <span class="keyword">else</span> {
+                    <span class="keyword">var</span> sameLine: <span class="type">Bool</span> = <span class="keyword">false</span>
+                    segment.<span class="property">tokens</span>.<span class="property">onSameLine</span>.<span class="call">forEach</span>( { token <span class="keyword">in
+                        if</span> token.<span class="call">hasSuffix</span>(<span class="string">":"</span>) {
+                            sameLine = <span class="keyword">true</span>
+                        }
+                    })
+                    <span class="keyword">if</span> sameLine {
+                        <span class="keyword">return true</span>
+                    }
+                }
+            }
+            <span class="keyword">if</span> segment.<span class="property">tokens</span>.<span class="property">current</span> == <span class="string">":"</span> {
+                <span class="keyword">return false</span>
+            }
+            <span class="keyword">return true</span>
+        }
+    }
+    
+    <span class="keyword">struct</span> NumberRule: <span class="type">SyntaxRule</span> {
+        <span class="keyword">var</span> tokenType: <span class="type">TokenType</span> { <span class="keyword">return</span> .<span class="dotAccess">number</span> }
+        
+        <span class="keyword">func</span> matches(<span class="keyword">_</span> segment: <span class="type">Segment</span>) -&gt; <span class="type">Bool</span> {
+            <span class="keyword">if</span> segment.<span class="property">tokens</span>.<span class="property">current</span>.<span class="property">isNumber</span> {
+                <span class="keyword">return true</span>
+            }
+            
+            <span class="keyword">guard</span> segment.<span class="property">tokens</span>.<span class="property">current</span> == <span class="string">"."</span> <span class="keyword">else</span> {
+                <span class="keyword">return false</span>
+            }
+            
+            <span class="keyword">guard let</span> prev = segment.<span class="property">tokens</span>.<span class="property">previous</span>, <span class="keyword">let</span> next = segment.<span class="property">tokens</span>.<span class="property">next</span> <span class="keyword">else</span> {
+                <span class="keyword">return false</span>
+            }
+            
+            <span class="keyword">return</span> prev.<span class="property">isNumber</span> &amp;&amp; next.<span class="property">isNumber</span>
+        }
+    }
+    
+    <span class="keyword">struct</span> KeywordRule: <span class="type">SyntaxRule</span> {
+        <span class="keyword">var</span> tokenType: <span class="type">TokenType</span> { <span class="keyword">return</span> .<span class="dotAccess">keyword</span> }
+        
+        <span class="keyword">func</span> matches(<span class="keyword">_</span> segment: <span class="type">Segment</span>) -&gt; <span class="type">Bool</span> {
+            <span class="keyword">return</span> keywords.<span class="call">contains</span>(segment.<span class="property">tokens</span>.<span class="property">current</span>)
+        }
+    }
+    
+    <span class="keyword">struct</span> TypeRule: <span class="type">SyntaxRule</span> {
+        <span class="keyword">var</span> tokenType: <span class="type">TokenType</span> { <span class="keyword">return</span> .<span class="dotAccess">type</span> }
+        
+        <span class="keyword">func</span> matches(<span class="keyword">_</span> segment: <span class="type">Segment</span>) -&gt; <span class="type">Bool</span> {
+            <span class="keyword">if let</span> next = segment.<span class="property">tokens</span>.<span class="property">next</span> {
+                <span class="keyword">return</span> next.<span class="call">hasSuffix</span>(<span class="string">":"</span>)
+            } <span class="keyword">else</span> {
+                <span class="keyword">return false</span>
+            }
+        }
+    }
+}
+
+<span class="keyword">extension</span> <span class="type">String</span>  {
+    <span class="keyword">var</span> isNumber: <span class="type">Bool</span> {
+        <span class="keyword">return</span> !isEmpty &amp;&amp; <span class="call">rangeOfCharacter</span>(from: <span class="type">CharacterSet</span>.<span class="property">decimalDigits</span>.<span class="property">inverted</span>) == <span class="keyword">nil</span>
+    }
+}
+</code></pre><p>By far the hardest part was the string rule. This is because we don't actually have access to the previous line of code when we are checking the current token. Ideally, I would have gone back over the last tokens until I hit a <code>|</code> to confirm if the token was inside of a multiline comment. If iterating led us to a colon instead, the token is not inside of a multiline comment. Instead I had to cheat and essentially say if the token doesn't fit into anything else, it's a multiline string. I believe there is a better way to do this, but I haven't been able to work it out just yet.</p><p>So now we have our <code>yaml</code> grammar rules, what next? Well the official <code>SplashPublishPlugin</code> does not allow the use of custom <code>Grammar</code>s. I submitted a <a href="https://github.com/JohnSundell/SplashPublishPlugin/pull/8">pull request</a> on GitHub, but haven't gotten a response yet. Instead of waiting for that to be merged I went ahead and wrote my own implementation of the plugin.</p><p>It looks like this:</p><pre><code><span class="keyword">import</span> Publish
+<span class="keyword">import</span> Splash
+<span class="keyword">import</span> Ink
+
+<span class="keyword">public extension</span> <span class="type">Plugin</span> {
+    <span class="keyword">static func</span> splashPlugin(withClassPrefix classPrefix: <span class="type">String</span> = <span class="string">""</span>, withGrammars grammars: [(grammar: <span class="type">Grammar</span>, name: <span class="type">String</span>)] = [(<span class="type">SwiftGrammar</span>(), <span class="string">"swift"</span>)]) -&gt; <span class="type">Self</span> {
+        <span class="type">Plugin</span>(name: <span class="string">"Splash"</span>) { context <span class="keyword">in</span>
+            context.<span class="property">markdownParser</span>.<span class="call">addModifier</span>(.<span class="call">splashCodeBlocks</span>(withFormat: <span class="type">HTMLOutputFormat</span>(classPrefix: classPrefix), withGrammars: grammars)
+            )
+        }
+    }
+}
+
+<span class="keyword">public extension</span> <span class="type">Modifier</span> {
+    <span class="keyword">static func</span> splashCodeBlocks(withFormat format: <span class="type">HTMLOutputFormat</span> = .<span class="keyword">init</span>(), withGrammars grammars: [(grammar: <span class="type">Grammar</span>, name: <span class="type">String</span>)] = [(<span class="type">SwiftGrammar</span>(), <span class="string">"swift"</span>)]) -&gt; <span class="type">Self</span> {
+        <span class="keyword">var</span> highlighter = <span class="type">SyntaxHighlighter</span>(format: format)
+        <span class="keyword">return</span> <span class="type">Modifier</span>(target: .<span class="dotAccess">codeBlocks</span>) { html, md <span class="keyword">in
+            var</span> markdown = md.<span class="call">dropFirst</span>(<span class="string">"```"</span>.<span class="property">count</span>)
+            
+            <span class="keyword">guard</span> !markdown.<span class="call">hasPrefix</span>(<span class="string">"no-highlight"</span>) <span class="keyword">else</span> {
+                <span class="keyword">return</span> html
+            }
+            grammars.<span class="call">forEach</span>({ grammar, name <span class="keyword">in
+                if</span> markdown.<span class="call">hasPrefix</span>(name) {
+                    highlighter = <span class="type">SyntaxHighlighter</span>(format: format, grammar: grammar)
+                }
+            })
+            
+            markdown = markdown
+                .<span class="call">drop</span>(while: { !$0.<span class="property">isNewline</span> })
+                .<span class="call">dropFirst</span>()
+                .<span class="call">dropLast</span>(<span class="string">"\n```"</span>.<span class="property">count</span>)
+            
+            <span class="keyword">let</span> highlighted = highlighter.<span class="call">highlight</span>(<span class="type">String</span>(markdown))
+            <span class="keyword">return</span> <span class="string">"&lt;pre&gt;&lt;code&gt;"</span> + highlighted + <span class="string">"\n&lt;/code&gt;&lt;/pre&gt;"</span>
+        }
+    }
+}
+</code></pre><p>Almost exactly like the official plugin, with the addition of a <code>grammars</code> argument in the plugin method. The method takes a list of tuples that contain both a <code>Grammar</code> and the desired name of said grammar. Then, when applying the grammars, I loop through each of the provided tuples to see if this section matches up with any of the provided <code>name</code>s. If we find a match, we highlight that section using <code>SyntaxHighlighter</code> with the provided <code>grammar</code>.</p><p>This code goes into a swift file and is imported in my <code>main.swift</code> and used like so:</p><pre><code><span class="keyword">try</span> <span class="type">Blog</span>().<span class="call">publish</span>(
+    using: [
+    .<span class="call">installPlugin</span>(
+        .<span class="call">splashPlugin</span>(
+            withClassPrefix: <span class="string">""</span>, 
+            withGrammars: [
+                (grammar: <span class="type">YamlGrammar</span>(), name: <span class="string">"yaml"</span>), 
+                (grammar: <span class="type">SwiftGrammar</span>(), <span class="string">"swift"</span>)
+            ]
+        )
+    ),
+    .<span class="call">addMarkdownFiles</span>(),
+    ...
+    ]
+)
+</code></pre><p>And now both <code>yaml</code> and <code>swift</code> code blocks are syntax highlighted across my website!</p><p>Overall, getting <code>yaml</code> syntax highlighting wasn't too bad. I do worry, however, that adding a language like <code>golang</code> or <code>C++</code> might be a kind of monumental task.</p><p>For now, I'll be sticking mergableWith <code>publish</code>. If the day comes that I need syntax highlighting for a more complex language and I just can't work it out, I might need to look into switching to something like <code>hugo</code> that already has plugins that support a vast majority of languages.</p>]]></content:encoded></item><item><guid isPermaLink="true">https://www.jdiggity.me/posts/publish-ghactions</guid><title>Using GitHub actions to deploy Publish sites to GitHub Pages</title><description>How to use GitHub Actions to deploy a static site built with Publish to GitHub Pages</description><link>https://www.jdiggity.me/posts/publish-ghactions</link><pubDate>Tue, 9 Aug 2022 18:32:00 +0000</pubDate><content:encoded><![CDATA[<h1>Using GitHub actions to deploy Publish sites to GitHub Pages</h1><p>I just spent a good few weeks looking for a good static site generator and in my journey found <a href="https://github.com/JohnSundell/Publish">Publish</a>. While this article isn’t about that, I highly recommend using Publish if you’re a Swift developer looking for a good static site generator!</p><p>While <code>Publish</code> comes with a built-in deployment function that works with GH Pages, <em>I</em> couldn't get it to work. It looks like it really only works if you’re deploying to a separate repository. Even then, a lot of us wish to automatically trigger a publish on each new blog post or git commit. I spent some time yesterday messing with GitHub Actions and put together a build script that can do just that.</p><h2>The Process</h2><p>I started off trying to simply spin up a macOS machine, cloning my repo, installing the <code>publish</code> command line tool from homebrew, generating the HTML and pushing that to my GitHub Pages branch.</p><p>This proved to be a bit of a hassle. GitHub actions uses a version of macOS that is too old to work with the publish command line tool that is available through homebrew.</p><p>“Okay,” I thought. “I’ll just build the command line tool from the source code.” Well, that didn’t work either. I was missing some swift concurrency libraries on the worker machine. That meant, I assume, the version of Swift on the GH Actions build machine was too old ☹️.</p><p>At this point I considered giving up, until I remembered Swift is cross platform! 🎉🎉</p><p>I set the runner to use <code>ubuntu-latest</code> instead of <code>macOS-latest</code> and got to thinking.</p><p>On Ubuntu the steps would be a bit different. First and foremost I’d need to install Swift. Luckily there exists an action on the GitHub Actions Marketplace called <a href="https://github.com/marketplace/actions/install-swift-on-linux"><code>Install Swift on Linux</code></a> which does just that: installs Swift on a Linux worker on Github Actions! Lucky day!</p><p>After Swift was installed I’d need to either get the <code>publish</code> command line tool building on Linux or figure out a way to build the project some other way. 🤞</p><p>Luckily (spoiler alert) the <code>publish</code> tool compiled and installed just fine on Ubuntu.</p><p>The last step was to push the resulting <code>Output</code> directory to my GitHub pages branch on my repo. Luckily there exists an awesome action on the GitHub Marketplace that makes doing that extremely easy. It’s called <a href="https://github.com/marketplace/actions/deploy-to-github-pages">Deploy to GitHub Pages</a> and it works like a charm!</p><p>Now that we’ve outlined the approach let’s get to making the workflow!</p><h2>Before we start...</h2><p>This will <em>not</em> be a GitHub Pages tutorial. In order to follow along here, you should already have GitHub Pages setup using one of your repos. You can check out the <a href="https://docs.github.com/en/pages/getting-started-with-github-pages/creating-a-github-pages-site">Creating a GitHub Pages Site</a> article for more info. Basically you'll create a new repository, name it <code>&lt;yourgithubusername&gt;.github.io</code> and configure the settings there.</p><h2>Creating the Workflow</h2><p>To get started creating the workflow we’ll open up a terminal and <code>cd</code> into our project’s root directory.</p><p>Once there, we create the directory <code>.github/workflows</code> and create a new file inside there called <code>main.yml</code>.</p><pre><code><span class="keyword">mkdir</span> <span class="type">-p</span> <span class="string">.github/workflows</span><br /><span class="keyword">touch</span> <span class="string">.github/workflows/main.yml</span></code></pre><p>Now we open up our favorite text editor and start configuring our workflow!</p><pre><code><span class="keyword">nvim</span> <span class="string">.github/workflows/main.yml</span></code></pre><p>First, we name our workflow:</p><pre><code><span class="type">name</span>: <span class="string">Deploy to GitHub Pages</span></code></pre><p>Next, we trigger the workflow when the branch with our source code receives a push. In my case, the source code for my blog is located on the <code>Publish</code> branch.</p><pre><code><span class="type">on</span>:<br />  <span class="type">push</span>:<br />    <span class="type">branches</span>: [ <span class="string">“Publish”</span> ]</code></pre><p>Finally we begin the actual workflow. First we tell the worker to use <code>ubuntu-latest</code> and use the marketplace action mentioned above to install the latest version of <code>Swift</code>.</p><pre><code><span class="type">jobs</span>:<br />  <span class="type">build</span>:<br />    <span class="type">runs-on</span>: <span class="string">ubuntu-latest</span><br />    <span class="type">steps</span>:<br />      - <span class="type">name</span>: <span class="string">Install Swift</span><br />        <span class="type">uses</span>: <span class="string">sersoft-gmbh/swifty-linux-action@v1</span><br />        <span class="type">with</span>:<br />          <span class="type">release-version</span>: <span class="string">5.6.2</span></code></pre><p>With our worker configured and swift installed we can move on to the next step: installing the <code>publish</code> command line tool.</p><p>Inside of the <code>steps</code> section we add the following:</p><pre><code>- <span class="type">name</span>: <span class="string">Install Publish</span><br />  <span class="type">run</span>: <span class="keyword">|</span><br /><span class="string">    git clone https://github.com/JohnSundell/Publish.git<br />    cd Publish<br />    make</span></code></pre><p>Now we can pull our repo to the worker and generate our static website!</p><pre><code>- <span class="type">uses</span>: <span class="string">actions/checkout@v3</span><br /><br />- <span class="type">name</span>: <span class="string">Generate site</span>
   <span class="type">run</span>: <span class="keyword">|</span><br /><span class="string">    cd $GITHUB_WORKSPACE/blog/<br />    publish generate</span></code></pre><p>A few things are going on here. First we use the <code>checkout</code> action from GitHub that pulls our repo from the branch that this <code>main.yml</code> is located on. The <code>checkout</code> action pulls the source code to <code>$GITHUB_WORKSPACE</code>, so we <code>cd</code> to that path. In my case, the source code is located inside of a subdirectory called <code>blog</code>, so I change directories to <code>$GITHUB_WORKSPACE/blog</code>. Once inside that directory we call <code>publish generate</code> to generate our static website.</p><p>Lastly we’ll use the <code>github-pages-deploy-action</code> to deploy our static site to our GitHub Pages branch!</p><pre><code><span class="keyword">-</span> <span class="type">name</span>: <span class="string">Deploy site</span>
   <span class="type">uses</span>: <span class="string">JamesIves/github-pages-deploy-action@v4</span>
     <span class="type">with</span>:
