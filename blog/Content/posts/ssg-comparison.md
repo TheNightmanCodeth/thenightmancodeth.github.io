@@ -1,6 +1,6 @@
 ---
 date: 2022-08-13 13:32
-description: The Grimm Adventures of Choosing a Static Site Generator
+description: How I struggled to find a static site generator with proper syntax highlighting and friendly templating
 tags: swift, publish, static-site-generators, syntax-highlighting
 ---
 
