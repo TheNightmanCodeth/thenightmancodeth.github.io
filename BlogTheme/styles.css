@@ -62,6 +62,7 @@ body {
     margin-right: auto;
     padding: 40px;
     text-align: left;
+    line-height: 1.5;
 }
 
 header {
@@ -229,7 +230,10 @@ footer {
  *  property: #4fb0cb
  */
 code {
-    font-family: "Code", monospace;
+    background-color: rgba(136, 142, 191, 40%);
+    border-radius: 6px;
+    padding: 2px 4px;
+    margin: 2px;
 }
 
 pre {
@@ -240,7 +244,8 @@ pre {
 }
 
 pre code {
-    font-family: monospace;
+    background-color: var(--code-bg-color);
+    font-family: "Code", monospace;
     display: block;
     padding: 0 20px;
     color: #FFF;
