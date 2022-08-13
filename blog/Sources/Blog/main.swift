@@ -1,7 +1,6 @@
 import Foundation
 import Publish
 import Plot
-import SplashPublishPlugin
 import Splash
 
 // This type acts as the configuration for your website.
