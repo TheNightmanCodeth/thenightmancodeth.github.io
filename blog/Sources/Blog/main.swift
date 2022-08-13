@@ -2,6 +2,7 @@ import Foundation
 import Publish
 import Plot
 import SplashPublishPlugin
+import Splash
 
 // This type acts as the configuration for your website.
 struct Blog: Website {
@@ -24,9 +25,12 @@ struct Blog: Website {
     var imagePath: Path? { nil }
 }
 
+
+
 // This will generate your website using the built-in Foundation theme:
-try Blog().publish(using: [
-    .installPlugin(.splash(withClassPrefix: "")),
+try Blog().publish(
+    using: [
+        .installPlugin(.splashPlugin(withClassPrefix: "", withGrammars: [(grammar: YamlGrammar(), name: "yaml"), (grammar: SwiftGrammar(), "swift")])),
     .addMarkdownFiles(),
     .copyResources(),
     .generateHTML(withTheme: .blog),
