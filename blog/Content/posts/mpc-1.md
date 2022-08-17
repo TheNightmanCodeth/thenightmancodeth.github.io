@@ -358,4 +358,4 @@ extension RPSMultipeerSession: MCNearbyServiceBrowserDelegate {
 
 [Don't forget to check out the GitHub repo!](https://github.com/TheNightmanCodeth/RPS)
 
-[Continue to part 2](/mpc-2)
+[Continue to part 2](/posts/mpc-2)

@@ -5,7 +5,7 @@ tags: swift, swiftUI
 ---
 # How I got the multipeer connectivity framework working with SwiftUI 4 - Part 2
 
-In (part 1)[/mpc-1] we created a skeleton RPSMultipeerSession to communicate from one device to another directly using only the multipeer connectivity framework, no backend server was used at all.
+In [part 1](/posts/mpc-2) we created a skeleton RPSMultipeerSession to communicate from one device to another directly using only the multipeer connectivity framework, no backend server was used at all.
 In this part we will finish implementing those methods and start building the UI!
 To start, we need a way to send our move to our opponent. Inside of the RPSMultipeerSession class, after deinit(), we will place this method:
 
