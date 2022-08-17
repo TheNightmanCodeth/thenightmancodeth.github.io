@@ -1,8 +1,9 @@
 ---
 date: 2022-08-07 18:32
-description: How I got the multipeer connectivity framework working with SwiftUI 4 - Part 2
+description: The dramatic conclusion to my epic 2-part series 
 tags: swift, swiftUI
 ---
+# How I got the multipeer connectivity framework working with SwiftUI 4 - Part 2
 
 In (part 1)[/mpc-1] we created a skeleton RPSMultipeerSession to communicate from one device to another directly using only the multipeer connectivity framework, no backend server was used at all.
 In this part we will finish implementing those methods and start building the UI!
